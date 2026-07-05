@@ -342,11 +342,21 @@ pins.forEach(function(pid,i){
   });
   el.addEventListener('keydown',function(ev){if(ev.key==='Backspace'&&!this.value&&i>0)document.getElementById(pins[i-1]).focus()});
 });
+function dobToCode(dob){
+  // Desktop app stores DOB as "MM/DD" (e.g. "03/15" for March 15).
+  // Workers type their code as day-then-month, e.g. "1503".
+  // Convert the stored value into that same DDMM shape before comparing.
+  if(!dob) return '';
+  var parts=dob.split('/');
+  if(parts.length!==2) return dob; // fallback, already in some other format
+  var mm=parts[0], dd=parts[1];
+  return dd+mm;
+}
 function checkPin(){
   var code=pins.map(function(p){return document.getElementById(p).value}).join('');
   if(code.length===4){
     var emp=(D.employees||[]).find(function(e){return e.id===curEmpId});
-    if(emp&&emp.dob===code){
+    if(emp&&dobToCode(emp.dob)===code){
       hoursUnlocked=true;
       document.getElementById('lockWrap').style.display='none';
       document.getElementById('hoursContent').style.display='block';
