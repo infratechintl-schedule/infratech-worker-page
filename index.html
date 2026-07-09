@@ -199,7 +199,7 @@ h1,h2,h3,.nav-day-name,.loc-name,.total-num,.wb-name,.hrs-week-lbl,.picker-intro
         <input class="pin-box" id="p3" type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]">
       </div>
       <div class="pin-error" id="pinErr"></div>
-      <div class="pin-hint">Example: if your birthday is <strong>March 15</strong>,<br>your code is <strong>1 5 0 3</strong> (day then month)</div>
+      <div class="pin-hint">Example: if your birthday is <strong>March 15</strong>,<br>your code is <strong>0 3 1 5</strong> (month then day)</div>
     </div>
     <div class="hours-content" id="hoursContent">
       <div class="hrs-week-nav"><button class="hrs-arrow" id="hPrev">&#8249;</button><div><div class="hrs-week-lbl" id="hWeekLbl"></div><div class="hrs-week-sub">Completed Week</div></div><button class="hrs-arrow" id="hNext">&#8250;</button></div>
@@ -346,12 +346,11 @@ function checkPin(){
   var code=pins.map(function(p){return document.getElementById(p).value}).join('');
   if(code.length===4){
     var emp=(D.employees||[]).find(function(e){return e.id===curEmpId});
-    if(emp&&emp.dob===code){
+    if(emp&&(emp.dob||'').replace(/\D/g,'')===code){
       hoursUnlocked=true;
-      document.getElementById('lockWrap').style.display='none';
-      document.getElementById('hoursContent').style.display='block';
       document.getElementById('pinErr').textContent='';
-      curHrWeekIdx=0;renderHours();
+      document.querySelector('.tabs').style.display='flex';
+      switchTab('sched');renderDay();renderWeek();
     }else{
       document.getElementById('pinErr').textContent='Wrong code. Try again.';
       pins.forEach(function(p){document.getElementById(p).value=''});
@@ -368,7 +367,20 @@ function showMain(id){
   document.getElementById('wbAvatar').textContent=initials(emp.name);
   document.getElementById('wbName').textContent=emp.name;
   document.getElementById('wbMeta').textContent=(emp.company?emp.company+' Housing - ':'')+emp.trade;
-  switchTab('sched');renderDay();renderWeek();window.scrollTo(0,0);
+  window.scrollTo(0,0);
+  showPinGate();
+}
+function showPinGate(){
+  // PIN is required immediately on opening a worker's page, before either
+  // Schedule or Hours is visible — once correct, both unlock together.
+  document.querySelector('.tabs').style.display='none';
+  document.getElementById('schedView').style.display='none';
+  document.getElementById('hoursView').style.display='block';
+  document.getElementById('lockWrap').style.display='block';
+  document.getElementById('hoursContent').style.display='none';
+  pins.forEach(function(p){document.getElementById(p).value=''});
+  document.getElementById('pinErr').textContent='';
+  setTimeout(function(){document.getElementById('p0').focus()},100);
 }
 function switchTab(t){
   curTab=t;
