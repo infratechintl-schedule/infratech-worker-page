@@ -260,6 +260,12 @@ h1,h2,h3,.nav-day-name,.loc-name,.total-num,.wb-name,.hrs-week-lbl,.picker-intro
 var API_BASE = "https://infratech-schedule.up.railway.app";
 var D = {employees: [], projects: [], schedules: {}, hours: {}};
 var dataLoaded = false;
+/* Office/admin staff and QC managers — hidden from the worker name picker */
+var WORKER_HIDDEN_NAMES = ["Jeffrey Roque","Jasper Talle","Johnix Lozano","Sherwin Ignacio"];
+function isHiddenFromWorkerPicker(e){
+  if((e.trade||"")==="Admin") return true;
+  return WORKER_HIDDEN_NAMES.indexOf(e.name)!==-1;
+}
 var DN=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 var DNS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
 var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -311,7 +317,7 @@ function loadData(){
 
 loadData();
 function renderPicker(q){
-  var emps=(D.employees||[]).filter(function(e){return(e.status||'Active')==='Active'}).sort(function(a,b){return a.name.localeCompare(b.name)});
+  var emps=(D.employees||[]).filter(function(e){return(e.status||'Active')==='Active'&&!isHiddenFromWorkerPicker(e)}).sort(function(a,b){return a.name.localeCompare(b.name)});
   var f=q?emps.filter(function(e){return e.name.toLowerCase().indexOf(q.toLowerCase())>=0}):emps;
   var nl=document.getElementById('nameList');
   if(!f.length){nl.innerHTML='<div class="no-result"><div class="ni">&#128533;</div><p>No name found.</p></div>';return}
