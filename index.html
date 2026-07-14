@@ -257,7 +257,9 @@ h1,h2,h3,.nav-day-name,.loc-name,.total-num,.wb-name,.hrs-week-lbl,.picker-intro
   <div class="footer"><strong>InfraTech International, LLC</strong><br>122 N. Chalan Okso Street, Harmon, Guam 96913<br>Bookmark this page - it updates every week</div>
 </div>
 <script>
-var API_BASE = window.location.origin;
+var API_BASE = (window.location.hostname.indexOf('github.io') >= 0)
+  ? 'https://infratech-schedule.up.railway.app'
+  : window.location.origin;
 var D = {employees: [], projects: [], schedules: {}, hours: {}};
 var rosterEmployees = [];
 var sessionToken = null;
