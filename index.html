@@ -257,14 +257,17 @@ h1,h2,h3,.nav-day-name,.loc-name,.total-num,.wb-name,.hrs-week-lbl,.picker-intro
   <div class="footer"><strong>InfraTech International, LLC</strong><br>122 N. Chalan Okso Street, Harmon, Guam 96913<br>Bookmark this page - it updates every week</div>
 </div>
 <script>
-var API_BASE = "https://infratech-schedule.up.railway.app";
+var API_BASE = window.location.origin;
 var D = {employees: [], projects: [], schedules: {}, hours: {}};
+var rosterEmployees = [];
+var sessionToken = null;
 var dataLoaded = false;
-/* Office/admin staff and QC managers — hidden from the worker name picker */
-var WORKER_HIDDEN_NAMES = ["Jeffrey Roque","Jasper Talle","Johnix Lozano","Sherwin Ignacio"];
-function isHiddenFromWorkerPicker(e){
-  if((e.trade||"")==="Admin") return true;
-  return WORKER_HIDDEN_NAMES.indexOf(e.name)!==-1;
+var TOKEN_KEY = 'itech_worker_token';
+var EMP_KEY = 'itech_worker_emp';
+function authHeaders(){
+  var h = {'Content-Type':'application/json'};
+  if(sessionToken) h['Authorization'] = 'Bearer '+sessionToken;
+  return h;
 }
 var DN=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 var DNS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
@@ -282,15 +285,82 @@ function initAfterLoad(){
   sunday=getSunday(); weekDays=getDays(sunday); weekKey=iso(sunday);
   (function(){var t=todayISO(),idx=-1;for(var i=0;i<7;i++){if(iso(weekDays[i])===t){idx=i;break}}curDayIdx=idx<0?1:idx})();
   hrWeekKeys=Object.keys(D.hours||{}).sort().reverse();
-  var saved=localStorage.getItem('itech_worker');
-  if(saved&&(D.employees||[]).find(function(e){return e.id===saved})){showMain(saved)}else{renderPicker('')}
+  var savedEmp=sessionStorage.getItem(EMP_KEY);
+  if(savedEmp && sessionToken && (D.employees||[]).find(function(e){return e.id===savedEmp})){
+    showMain(savedEmp, true);
+  } else {
+    renderPicker('');
+  }
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('pickerScreen').style.visibility='visible';
 }
 
+function showLoadingError(title, detail){
+  document.getElementById('loadingScreen').innerHTML =
+    '<div style="text-align:center;padding:60px 24px;color:#6B7280">'+
+    '<div style="font-size:44px;margin-bottom:12px">&#9888;&#65039;</div>'+
+    '<h3 style="font-size:16px;font-weight:600;color:#374151;margin-bottom:8px">'+title+'</h3>'+
+    '<p style="font-size:13px;line-height:1.5">'+detail+'</p>'+
+    '<button onclick="location.reload()" style="margin-top:16px;background:#E35C13;color:#fff;border:none;'+
+    'border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer">Retry</button>'+
+    '</div>';
+  document.getElementById('loadingScreen').style.display='flex';
+}
+
+function validateWorkerToken(token){
+  return fetch(API_BASE+'/api/session', {headers: {'Authorization': 'Bearer '+token}})
+    .then(function(r){ if(!r.ok) throw new Error('invalid_token'); return r.json(); });
+}
+
+function loadRoster(){
+  fetch(API_BASE+'/api/worker/roster')
+    .then(function(r){ if(!r.ok) throw new Error('Server responded '+r.status); return r.json(); })
+    .then(function(list){
+      rosterEmployees = list || [];
+      if(!rosterEmployees.length){
+        showLoadingError(
+          'Schedule not published yet',
+          'Your admin has not published this week\'s schedule to the web yet.<br>'+
+          '<span style="font-size:11px;color:#9CA3AF">Ask the office to click <b>Publish to Web</b> from the desktop app, then refresh this page.</span>'
+        );
+        return;
+      }
+      var savedToken = sessionStorage.getItem(TOKEN_KEY);
+      var savedEmp = sessionStorage.getItem(EMP_KEY);
+      if(savedToken && savedEmp){
+        return validateWorkerToken(savedToken).then(function(){
+          sessionToken = savedToken;
+          return loadData();
+        }).catch(function(){
+          sessionToken = null;
+          sessionStorage.removeItem(TOKEN_KEY);
+          sessionStorage.removeItem(EMP_KEY);
+          dataLoaded = true;
+          D.employees = rosterEmployees;
+          initAfterLoad();
+        });
+      }
+      dataLoaded = true;
+      D.employees = rosterEmployees;
+      initAfterLoad();
+    })
+    .catch(function(err){
+      showLoadingError(
+        'Could not load schedule',
+        'Please check your internet connection and try again.<br>'+
+        '<span style="font-size:11px;color:#9CA3AF">('+ (err.message||'network error') +')</span>'
+      );
+    });
+}
+
 function loadData(){
-  fetch(API_BASE+'/api/schedule')
+  return fetch(API_BASE+'/api/schedule', {headers: authHeaders()})
     .then(function(r){
+      if(r.status===401){
+        sessionToken=null;
+        sessionStorage.removeItem(TOKEN_KEY);
+        throw new Error('Session expired — tap your name and enter your PIN again.');
+      }
       if(!r.ok) throw new Error('Server responded '+r.status);
       return r.json();
     })
@@ -301,23 +371,12 @@ function loadData(){
       D.hours     = data.hours     || {};
       dataLoaded = true;
       initAfterLoad();
-    })
-    .catch(function(err){
-      document.getElementById('loadingScreen').innerHTML =
-        '<div style="text-align:center;padding:60px 24px;color:#6B7280">'+
-        '<div style="font-size:44px;margin-bottom:12px">&#9888;&#65039;</div>'+
-        '<h3 style="font-size:16px;font-weight:600;color:#374151;margin-bottom:8px">Could not load schedule</h3>'+
-        '<p style="font-size:13px;line-height:1.5">Please check your internet connection and try again.<br>'+
-        '<span style="font-size:11px;color:#9CA3AF">('+err.message+')</span></p>'+
-        '<button onclick="location.reload()" style="margin-top:16px;background:#E35C13;color:#fff;border:none;'+
-        'border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer">Retry</button>'+
-        '</div>';
     });
 }
 
-loadData();
+loadRoster();
 function renderPicker(q){
-  var emps=(D.employees||[]).filter(function(e){return(e.status||'Active')==='Active'&&!isHiddenFromWorkerPicker(e)}).sort(function(a,b){return a.name.localeCompare(b.name)});
+  var emps=(rosterEmployees||[]).slice().sort(function(a,b){return a.name.localeCompare(b.name)});
   var f=q?emps.filter(function(e){return e.name.toLowerCase().indexOf(q.toLowerCase())>=0}):emps;
   var nl=document.getElementById('nameList');
   if(!f.length){nl.innerHTML='<div class="no-result"><div class="ni">&#128533;</div><p>No name found.</p></div>';return}
@@ -328,8 +387,14 @@ function renderPicker(q){
   }).join('');
 }
 document.getElementById('pkSearch').addEventListener('input',function(){renderPicker(this.value.trim())});
-document.getElementById('nameList').addEventListener('click',function(ev){var it=ev.target.closest('.name-item');if(!it)return;var id=it.getAttribute('data-id');localStorage.setItem('itech_worker',id);showMain(id)});
-document.getElementById('backBtn').addEventListener('click',function(){localStorage.removeItem('itech_worker');hoursUnlocked=false;document.getElementById('mainScreen').style.display='none';document.getElementById('pickerScreen').style.display='block';document.getElementById('pkSearch').value='';renderPicker('');window.scrollTo(0,0)});
+document.getElementById('nameList').addEventListener('click',function(ev){var it=ev.target.closest('.name-item');if(!it)return;var id=it.getAttribute('data-id');sessionStorage.setItem(EMP_KEY,id);showMain(id,false)});
+document.getElementById('backBtn').addEventListener('click',function(){
+  sessionStorage.removeItem(EMP_KEY); sessionStorage.removeItem(TOKEN_KEY);
+  sessionToken=null; hoursUnlocked=false;
+  document.getElementById('mainScreen').style.display='none';
+  document.getElementById('pickerScreen').style.display='block';
+  document.getElementById('pkSearch').value=''; renderPicker(''); window.scrollTo(0,0);
+});
 document.getElementById('prevBtn').addEventListener('click',function(){changeDay(-1)});
 document.getElementById('nextBtn').addEventListener('click',function(){changeDay(1)});
 document.getElementById('weekDays').addEventListener('click',function(ev){var c=ev.target.closest('.wd-cell');if(!c)return;curDayIdx=parseInt(c.getAttribute('data-i'),10);renderDay();renderWeek()});
@@ -351,30 +416,54 @@ pins.forEach(function(pid,i){
 function checkPin(){
   var code=pins.map(function(p){return document.getElementById(p).value}).join('');
   if(code.length===4){
-    var emp=(D.employees||[]).find(function(e){return e.id===curEmpId});
-    if(emp&&(emp.dob||'').replace(/\D/g,'')===code){
+    fetch(API_BASE+'/api/worker/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({employee_id: curEmpId, pin: code})
+    }).then(function(r){
+      if(!r.ok) throw new Error('bad_pin');
+      return r.json();
+    }).then(function(res){
+      sessionToken = res.token;
+      sessionStorage.setItem(TOKEN_KEY, res.token);
+      sessionStorage.setItem(EMP_KEY, curEmpId);
+      return loadData();
+    }).then(function(){
       hoursUnlocked=true;
       document.getElementById('pinErr').textContent='';
       document.querySelector('.tabs').style.display='flex';
-      switchTab('sched');renderDay();renderWeek();
-    }else{
-      document.getElementById('pinErr').textContent='Wrong code. Try again.';
+      switchTab('sched'); renderDay(); renderWeek();
+    }).catch(function(err){
+      if(err && err.message && err.message.indexOf('Session expired')>=0){
+        document.getElementById('pinErr').textContent='Session expired. Enter your PIN again.';
+      } else if(err && err.message && err.message.indexOf('Server responded')>=0){
+        document.getElementById('pinErr').textContent='Could not load schedule. Check connection and try again.';
+      } else {
+        document.getElementById('pinErr').textContent='Wrong code. Try again.';
+      }
       pins.forEach(function(p){document.getElementById(p).value=''});
       document.getElementById('p0').focus();
-    }
+    });
   }
 }
-function showMain(id){
-  var emp=(D.employees||[]).find(function(e){return e.id===id});
+function showMain(id, skipPin){
+  var emp=(D.employees||[]).find(function(e){return e.id===id}) || (rosterEmployees||[]).find(function(e){return e.id===id});
   if(!emp){document.getElementById('backBtn').click();return}
-  curEmpId=id;hoursUnlocked=false;
+  curEmpId=id;
   document.getElementById('pickerScreen').style.display='none';
   document.getElementById('mainScreen').style.display='block';
   document.getElementById('wbAvatar').textContent=initials(emp.name);
   document.getElementById('wbName').textContent=emp.name;
-  document.getElementById('wbMeta').textContent=(emp.company?emp.company+' Housing - ':'')+emp.trade;
+  document.getElementById('wbMeta').textContent=(emp.company?emp.company+' Housing - ':'')+(emp.trade||'');
   window.scrollTo(0,0);
-  showPinGate();
+  if(skipPin && sessionToken){
+    hoursUnlocked=true;
+    document.querySelector('.tabs').style.display='flex';
+    switchTab('sched'); renderDay(); renderWeek();
+  } else {
+    hoursUnlocked=false;
+    showPinGate();
+  }
 }
 function showPinGate(){
   // PIN is required immediately on opening a worker's page, before either
@@ -515,7 +604,7 @@ document.getElementById('repSubmitBtn').addEventListener('click',function(){
 
   fetch(API_BASE+'/api/reports',{
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers: authHeaders(),
     body:JSON.stringify(payload)
   })
   .then(function(r){
@@ -543,7 +632,7 @@ document.getElementById('repDoneBtn').addEventListener('click',function(){
 function renderMyReports(wk){
   var wrap=document.getElementById('myReportsWrap');
   if(!curEmpId){wrap.innerHTML='';return}
-  fetch(API_BASE+'/api/reports?emp_id='+encodeURIComponent(curEmpId))
+  fetch(API_BASE+'/api/reports?emp_id='+encodeURIComponent(curEmpId), {headers: authHeaders()})
     .then(function(r){return r.json()})
     .then(function(all){
       var reports=all.filter(function(r){return r.week_key===wk});
