@@ -340,11 +340,13 @@ function loadRoster(){
           dataLoaded = true;
           D.employees = rosterEmployees;
           initAfterLoad();
+          startWorkerAutoSync();
         });
       }
       dataLoaded = true;
       D.employees = rosterEmployees;
       initAfterLoad();
+      startWorkerAutoSync();
     })
     .catch(function(err){
       showLoadingError(
@@ -355,7 +357,7 @@ function loadRoster(){
     });
 }
 
-function loadData(){
+function loadData(silent){
   return fetch(API_BASE+'/api/schedule', {headers: authHeaders()})
     .then(function(r){
       if(r.status===401){
@@ -371,9 +373,40 @@ function loadData(){
       D.projects  = data.projects  || [];
       D.schedules = data.schedules || {};
       D.hours     = data.hours     || {};
+      if(data.published_at) lastServerVersion = data.published_at;
       dataLoaded = true;
       initAfterLoad();
+      if(silent && curEmpId){
+        renderWeek(); renderDay(); if(hoursUnlocked) renderHours();
+      }
     });
+}
+
+var lastServerVersion = null;
+var workerSyncTimer = null;
+function startWorkerAutoSync(){
+  if(workerSyncTimer) clearInterval(workerSyncTimer);
+  workerSyncTimer = setInterval(function(){
+    fetch(API_BASE+'/api/data-version')
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        if(!v.published_at) return;
+        if(!lastServerVersion){ lastServerVersion = v.published_at; return; }
+        if(v.published_at === lastServerVersion) return;
+        lastServerVersion = v.published_at;
+        if(sessionToken && curEmpId){
+          loadData(true);
+        } else {
+          var q = document.getElementById('pkSearch').value.trim();
+          fetch(API_BASE+'/api/worker/roster')
+            .then(function(r){ return r.json(); })
+            .then(function(list){
+              rosterEmployees = list || [];
+              renderPicker(q);
+            }).catch(function(){});
+        }
+      }).catch(function(){});
+  }, 45000);
 }
 
 loadRoster();
